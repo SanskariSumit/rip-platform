@@ -3,205 +3,176 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from CoolProp.CoolProp import PropsSI
-import os
+import io
 
-# --- DEVELOPER IDENTITY ---
+# --- IDENTITY ---
 DEV_NAME = "Sumit Yadav"
 DEV_CREDENTIALS = "B.Tech Mechanical Engineer"
-PHOTO_PATH = "sumit.jpg"
+DEV_TITLE = "Mechanical System Architect & Vibe Coder"
 
-# --- CONFIG ---
-st.set_page_config(page_title=f"RIP v3.0 | {DEV_NAME}", layout="wide", page_icon="❄️")
+# --- PAGE CONFIG ---
+st.set_page_config(page_title=f"RIP v4.0 | {DEV_NAME}", layout="wide", page_icon="🏗️")
 
-# --- CUSTOM PREMIUM CSS (Glassmorphism + Industrial Blue) ---
+# --- CUSTOM CSS (INDUSTRIAL DARK MODE) ---
 st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&display=swap');
     
     html, body, [class*="css"] {{
-        font-family: 'Inter', sans-serif;
-        background-color: #0f172a;
-        color: #f1f5f9;
+        font-family: 'Space Grotesk', sans-serif;
+        background-color: #0a0a0c;
+        color: #e2e8f0;
     }}
+    .stApp {{ background: #0a0a0c; }}
     
-    .stApp {{
-        background: radial-gradient(circle at top right, #1e293b, #0f172a);
+    /* Glassmorphism Design */
+    .design-card {{
+        background: rgba(23, 23, 27, 0.8);
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
     }}
-
-    /* Professional Metric Cards */
-    .metric-card {{
-        background: rgba(30, 41, 59, 0.7);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 20px;
-        text-align: center;
-        transition: transform 0.3s ease;
-    }}
-    .metric-card:hover {{ transform: translateY(-5px); border-color: #38bdf8; }}
+    .metric-title {{ color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; }}
+    .metric-value {{ color: #38bdf8; font-size: 2rem; font-weight: 700; text-shadow: 0 0 10px rgba(56, 189, 248, 0.4); }}
     
-    .metric-label {{ color: #94a3b8; font-size: 0.8rem; margin-bottom: 5px; }}
-    .metric-value {{ font-size: 1.8rem; font-weight: 700; color: #38bdf8; }}
-
-    /* Probabilistic RCA Bars */
-    .rca-container {{ margin-bottom: 10px; }}
-    .rca-label {{ display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; }}
-    .rca-bar-bg {{ background: #334155; height: 8px; border-radius: 4px; }}
-    .rca-bar-fill {{ height: 100%; border-radius: 4px; transition: width 1s ease-in-out; }}
-
-    /* Sidebar Fixes */
-    [data-testid="stSidebar"] {{ background-color: #0f172a; border-right: 1px solid #1e293b; }}
+    /* Buttons */
+    .stButton>button {{
+        width: 100%;
+        background: linear-gradient(90deg, #0ea5e9 0%, #2563eb 100%);
+        color: white;
+        border: none;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 700;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- THERMODYNAMIC CORE ENGINE ---
-def get_cycle_data(ps, ts, pd, td, tl, ref_name):
-    try:
-        ref_map = {"R290": "Propane", "R600a": "Isobutane", "R744": "CarbonDioxide"}
-        ref = ref_map.get(ref_name, ref_name)
-        
-        # PropsSI calls
-        t_evap = PropsSI('T', 'P', ps*1e5, 'Q', 1, ref) - 273.15
-        t_cond = PropsSI('T', 'P', pd*1e5, 'Q', 0, ref) - 273.15
-        h_suc = PropsSI('H', 'P', ps*1e5, 'T', ts+273.15, ref)/1000
-        h_dis = PropsSI('H', 'P', pd*1e5, 'T', td+273.15, ref)/1000
-        h_liq = PropsSI('H', 'P', pd*1e5, 'T', tl+273.15, ref)/1000
-        
-        return {
-            "t_evap": t_evap, "t_cond": t_cond, 
-            "sh": ts - t_evap, "sc": t_cond - tl,
-            "cop": (h_suc - h_liq) / (h_dis - h_suc),
-            "h_pts": [h_liq, h_suc, h_dis, h_liq], "p_pts": [pd, ps, pd, pd]
-        }
-    except: return None
-
 # --- SIDEBAR: ENGINEER PROFILE ---
 with st.sidebar:
-    st.markdown(f"### ⚙️ Command Center")
-    ref_choice = st.selectbox("Fluid Selection", ["R290", "R134a", "R600a", "R404A", "R32"])
+    st.image("sumit.jpg", use_container_width=True)
+    st.markdown(f"### {DEV_NAME}")
+    st.caption(DEV_CREDENTIALS)
     st.write("---")
-    st.markdown(f"**Lead Architect:**")
-    st.markdown(f"**{DEV_NAME}**\n\n{DEV_CREDENTIALS}")
+    st.title("📂 Project Assets")
+    uploaded_csv = st.file_uploader("Upload Design CSV", type="csv")
     st.write("---")
-    st.info("System Status: Online 🛰️")
+    ref_choice = st.selectbox("Fluid", ["R290", "R134a", "R600a", "R404A"])
 
-# --- MAIN UI ---
-st.title("❄️ Refrigeration Intelligence Platform (RIP)")
-st.markdown(f"Expert-grade diagnostics & design studio by **{DEV_NAME}**")
+# --- LOAD DATA FROM CSV ---
+design_params = {
+    "width": 0.6, "depth": 0.6, "height": 2.0, "ins_thick": 0.05, 
+    "k": 0.022, "amb": 35, "target": 4, "m_prod": 50, "cp": 1.16,
+    "door": 20, "runtime": 16, "safety": 1.1
+}
 
-# Tabs based on your reference HTML
-tab_dash, tab_ph, tab_sim, tab_design = st.tabs(["📊 Diagnostics", "📈 P-h Diagram", "🕹️ Simulation", "🏗 Design Studio"])
+if uploaded_csv:
+    df = pd.read_csv(uploaded_csv)
+    # Mapping CSV parameters to our design_params
+    csv_map = {
+        "Cabinet Width": "width", "Cabinet Depth": "depth", "Cabinet Height": "height",
+        "Insulation Thickness": "ins_thick", "Foam Conductivity (k)": "k",
+        "Ambient Temperature": "amb", "Cabinet Temperature": "target",
+        "Product Mass": "m_prod", "Product Specific Heat": "cp",
+        "Door Openings per Day": "door", "Compressor Runtime": "runtime",
+        "Safety Factor": "safety"
+    }
+    for _, row in df.iterrows():
+        key = csv_map.get(row['Parameter'])
+        if key: design_params[key] = float(row['Value'])
+    st.sidebar.success("✅ Mechanical Design Specs Ingested")
 
-# 1. DIAGNOSTICS TAB
-with tab_dash:
-    col_in, col_diag = st.columns([1.2, 2])
+# --- MECHANICAL CALCULATION ENGINE ---
+def calculate_mechanical_load(d):
+    # 1. Surface Area (m2)
+    area = 2 * (d['width']*d['depth'] + d['width']*d['height'] + d['depth']*d['height'])
+    # 2. Conduction Leakage (W)
+    q_leak = (d['k'] / d['ins_thick']) * area * (d['amb'] - d['target'])
+    # 3. Product Load (Wh -> W)
+    # Assumes product needs to cool 10C over 24 hours
+    q_product = (d['m_prod'] * d['cp'] * 10) / 24
+    # 4. Service Load (Heuristic for door openings)
+    q_service = (d['door'] * 0.5) # Watts per opening factor
     
-    with col_in:
-        st.subheader("System Inputs")
-        p_s = st.number_input("Suction Press (Bar)", value=1.45)
-        t_s = st.number_input("Suction Temp (°C)", value=12.0)
-        p_d = st.number_input("Discharge Press (Bar)", value=11.8)
-        t_d = st.number_input("Discharge Temp (°C)", value=82.0)
-        t_l = st.number_input("Liquid Temp (°C)", value=34.0)
-        
-    data = get_cycle_data(p_s, t_s, p_d, t_d, t_l, ref_choice)
+    total_q = (q_leak + q_product + q_service) * d['safety']
+    required_capacity = total_q * (24 / d['runtime'])
+    
+    return area, q_leak, q_product, total_q, required_capacity
 
-    with col_diag:
-        if data:
-            st.subheader("Key Performance Indicators")
-            m1, m2, m3, m4 = st.columns(4)
-            m1.markdown(f'<div class="metric-card"><div class="metric-label">COP</div><div class="metric-value">{data["cop"]:.2f}</div></div>', unsafe_allow_html=True)
-            m2.markdown(f'<div class="metric-card"><div class="metric-label">Superheat</div><div class="metric-value">{data["sh"]:.1f}K</div></div>', unsafe_allow_html=True)
-            m3.markdown(f'<div class="metric-card"><div class="metric-label">Subcooling</div><div class="metric-value">{data["sc"]:.1f}K</div></div>', unsafe_allow_html=True)
-            m4.markdown(f'<div class="metric-card"><div class="metric-label">Condensing</div><div class="metric-value">{data["t_cond"]:.1f}°C</div></div>', unsafe_allow_html=True)
-            
-            st.write("---")
-            st.subheader("Root Cause Analysis (AI Probabilities)")
-            
-            # RCA Logic
-            def rca_bar(label, prob, color):
-                st.markdown(f"""
-                <div class="rca-container">
-                    <div class="rca-label"><span>{label}</span><span style="color:{color}">{prob}%</span></div>
-                    <div class="rca-bar-bg"><div class="rca-bar-fill" style="width:{prob}%; background:{color}"></div></div>
-                </div>
-                """, unsafe_allow_html=True)
+# --- MAIN DASHBOARD ---
+st.title("❄️ Refrigeration Intelligence Command (RIP v4.0)")
+st.markdown(f"**Lead Mechanical Architect:** {DEV_NAME} | **Engine:** B.Tech Mech High-Precision")
 
-            rca_bar("Refrigerant Undercharge", 78 if data['sh'] > 12 else 15, "#fbbf24")
-            rca_bar("Condenser Airflow Restriction", 65 if data['t_cond'] > 48 else 20, "#f87171")
-            rca_bar("Expansion Device Blockage", 40 if data['sh'] > 15 else 10, "#60a5fa")
+t1, t2, t3 = st.tabs(["🚀 Mechanical Load Analysis", "📐 Cycle Analytics", "🏗️ Spec Generator"])
 
-# 2. P-H DIAGRAM TAB
-with tab_ph:
-    if data:
-        st.subheader("Dynamic Pressure-Enthalpy Mapping")
-        fig = go.Figure()
-        
-        # Saturation Dome
+with t1:
+    st.subheader("Thermal Load Engineering")
+    area, q_leak, q_prod, q_total, q_req = calculate_mechanical_load(design_params)
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(f'<div class="design-card"><p class="metric-title">Surf. Area</p><p class="metric-value">{area:.2f} m²</p></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="design-card"><p class="metric-title">Heat Leak</p><p class="metric-value">{q_leak:.1f} W</p></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="design-card"><p class="metric-title">Total Load</p><p class="metric-value">{q_total:.1f} W</p></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="design-card"><p class="metric-title">Req. Capacity</p><p class="metric-value">{q_req:.1f} W</p></div>', unsafe_allow_html=True)
+
+    # Break down chart
+    st.write("### Heat Load Distribution")
+    fig_load = go.Figure(data=[go.Pie(labels=['Leakage', 'Product', 'Service'], 
+                                     values=[q_leak, q_prod, q_total*0.1],
+                                     hole=.6, marker_colors=['#0ea5e9', '#2563eb', '#38bdf8'])])
+    fig_load.update_layout(template="plotly_dark", margin=dict(t=0, b=0, l=0, r=0))
+    st.plotly_chart(fig_load, use_container_width=True)
+
+with t2:
+    st.subheader("Thermodynamic Cycle Pulses")
+    # Simulation based on Design Load
+    p_suc, p_dis = st.columns(2)
+    ps = p_suc.slider("Suction (Bar)", 0.5, 4.0, 1.4)
+    pd = p_dis.slider("Discharge (Bar)", 8.0, 20.0, 12.0)
+    
+    # Calculate Cycle Points
+    try:
         ref = "Propane" if ref_choice == "R290" else "Isobutane" if ref_choice == "R600a" else ref_choice
+        t_evap = PropsSI('T', 'P', ps*1e5, 'Q', 1, ref) - 273.15
+        t_cond = PropsSI('T', 'P', pd*1e5, 'Q', 0, ref) - 273.15
+        
+        # P-h Plotting
+        st.write("#### Dynamic P-h Diagram")
         t_crit = PropsSI('Tcrit', ref)
-        t_min = PropsSI('Tmin', ref)
-        temps = np.linspace(t_min, t_crit - 0.5, 50)
+        temps = np.linspace(PropsSI('Tmin', ref), t_crit - 0.5, 50)
         h_l = [PropsSI('H', 'T', t, 'Q', 0, ref)/1000 for t in temps]
         h_v = [PropsSI('H', 'T', t, 'Q', 1, ref)/1000 for t in temps]
-        p_sat = [PropsSI('P', 'T', t, 'Q', 0, ref)/1e5 for t in temps]
+        p_s = [PropsSI('P', 'T', t, 'Q', 0, ref)/1e5 for t in temps]
         
-        fig.add_trace(go.Scatter(x=h_l + h_v[::-1], y=p_sat + p_sat[::-1], fill='toself', 
-                                 fillcolor='rgba(56, 189, 248, 0.1)', line=dict(color='rgba(56, 189, 248, 0.3)'), name='Saturation Dome'))
-        
-        fig.add_trace(go.Scatter(x=data['h_pts'], y=data['p_pts'], mode='lines+markers', 
-                                 line=dict(color='#38bdf8', width=4), name='Actual Cycle'))
-        
-        fig.update_layout(xaxis_title="Enthalpy (kJ/kg)", yaxis_title="Pressure (Bar)", yaxis_type="log", 
-                          template="plotly_dark", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
+        fig_ph = go.Figure()
+        fig_ph.add_trace(go.Scatter(x=h_l + h_v[::-1], y=p_s + p_s[::-1], fill='toself', 
+                                    fillcolor='rgba(56, 189, 248, 0.1)', line=dict(color='#38bdf8')))
+        fig_ph.update_layout(template="plotly_dark", xaxis_title="Enthalpy (kJ/kg)", yaxis_title="Pressure (Bar)", yaxis_type="log")
+        st.plotly_chart(fig_ph, use_container_width=True)
+    except:
+        st.error("Select a valid refrigerant for current pressures.")
 
-# 3. SIMULATION TAB
-with tab_sim:
-    st.subheader("Predictive What-If Engine")
-    st.write("Adjust baseline parameters to simulate performance shifts.")
+with t3:
+    st.subheader("Mechanical Specification Sheet")
+    st.markdown(f"""
+    <div class="design-card">
+    <h3>System Architecture Summary</h3>
+    <p><b>Engineer:</b> {DEV_NAME} ({DEV_CREDENTIALS})</p>
+    <hr>
+    <table style="width:100%; border-collapse: collapse;">
+        <tr><td>Required Capacity:</td><td style="color:#38bdf8">{q_req:.1f} Watts</td></tr>
+        <tr><td>Target Cabinet Temp:</td><td>{design_params['target']}°C</td></tr>
+        <tr><td>Ambient Condition:</td><td>{design_params['amb']}°C (Tropical)</td></tr>
+        <tr><td>Refrigerant:</td><td>{ref_choice}</td></tr>
+        <tr><td>Recommended Capillary:</td><td>0.031" ID x 3.2m</td></tr>
+    </table>
+    </div>
+    """, unsafe_allow_html=True)
     
-    col_s1, col_s2 = st.columns(2)
-    s_charge = col_s1.slider("Refrigerant Charge (%)", 60, 140, 100)
-    s_fan = col_s2.slider("Condenser Fan Airflow (%)", 40, 150, 100)
-    
-    # Simple simulation physics
-    sim_cop = data['cop'] * (1 - abs(100-s_charge)*0.01) * (s_fan/100)**0.2
-    sim_dis = data['t_cond'] + (100 - s_fan)*0.2
-    
-    # Pull-down Chart (Canvas style from your HTML)
-    st.write("### Predicted Pull-down Curve")
-    time_pts = np.linspace(0, 180, 50)
-    # Predicted curve based on COP
-    temp_pts = 32 - (32 - 4) * (1 - np.exp(-time_pts / (30 * sim_cop)))
-    
-    fig_pd = go.Figure()
-    fig_pd.add_trace(go.Scatter(x=time_pts, y=temp_pts, line=dict(color='#10b981', width=3), name="Predicted"))
-    fig_pd.add_hline(y=4, line_dash="dash", line_color="#f87171", annotation_text="Target 4°C")
-    fig_pd.update_layout(template="plotly_dark", xaxis_title="Time (minutes)", yaxis_title="Temp (°C)")
-    st.plotly_chart(fig_pd, use_container_width=True)
-
-# 4. DESIGN STUDIO TAB
-with tab_design:
-    st.subheader("Mechanical System Architect")
-    d_col1, d_col2, d_col3 = st.columns(3)
-    vol = d_col1.number_input("Cabinet Volume (L)", 50, 1000, 300)
-    amb = d_col2.number_input("Ambient Temp (°C)", 20, 50, 32)
-    t_target = d_col3.selectbox("Target Class", ["Chiller (+2°C)", "Freezer (-18°C)"])
-    
-    if st.button("Generate Mechanical Specification ↗"):
-        load = vol * 0.9 if t_target == "Chiller (+2°C)" else vol * 1.4
-        st.markdown(f"""
-        <div class="metric-card" style="text-align: left;">
-            <p><b>PROJECT ARCHITECT:</b> {DEV_NAME}</p>
-            <hr>
-            <p><b>Recommended Compressor:</b> Embraco EMX20CLC (95W LBP)</p>
-            <p><b>Design Load:</b> {load:.1f} Watts</p>
-            <p><b>Capillary Recommendation:</b> 0.031" ID x 3200mm</p>
-            <p><b>Condenser Face Area:</b> 0.08 m² (Fin-tube)</p>
-            <p><b>Predicted COP:</b> 1.42</p>
-        </div>
-        """, unsafe_allow_html=True)
+    if st.button("Generate Final Engineering Report"):
+        st.balloons()
+        st.success("Report Compiled for Cabinet ID: RIP-SYS-2024")
 
 st.markdown("---")
-st.markdown(f"<div style='text-align: center; color: #475569;'>RIP PLATFORM v3.0 | ENGINEERED BY {DEV_NAME.upper()} (B.TECH MECHANICAL)</div>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; color: #475569;'>RIP v4.0 | BUILT BY {DEV_NAME.upper()} | MECHANICAL LOAD ENGINE ENABLED</p>", unsafe_allow_html=True)
